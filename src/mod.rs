@@ -77,7 +77,10 @@ where A: Clone + Eq,
                     Ok(_) => unreachable!(),
                 },
             NegLookahead(ref a) => {
-                fail!("Unimplemented")
+                match self.try_match(&**a, input) {
+                    Err(_) => Ok( (Zilch, input) ),
+                    Ok(_) => Err(()),
+                }
             },
         }
     }
