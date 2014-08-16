@@ -29,6 +29,11 @@ type MatchReturn<'a, A> = (Value<A>, Values<'a, A>);
 
 type Values<'a, A> = &'a [Value<A>];
 
+fn append_all_move<T>(mut a: Vec<T>, b: Vec<T>) -> Vec<T> {
+    a.push_all_move(b);
+    a
+}
+
 // my only question is why Seq's value is just the value of the second application,
 // but Iter's value is a list of the value from each application
 impl<A, N> Grammar<A, N>
@@ -47,17 +52,33 @@ where A: Clone + Eq,
                 }
             },
             Nonterminal(ref n) => self.try_match( self.rules.find(n).unwrap(), input ),
-            Seq(ref e, ref f) =>
-                match self.try_match(&**e, input) {
+            Seq(ref a, ref b) =>
+                match self.try_match(&**a, input) {
                     Err(()) => Err(()),
-                    Ok((_, vs)) => self.try_match(&**f, vs),
+                    Ok((_, vs)) => self.try_match(&**b, vs),
                 },
-            Alt(ref e, ref f) =>
-                match self.try_match(&**e, input) {
-                    Err(()) => self.try_match(&**f, input),
+            Alt(ref a, ref b) =>
+                match self.try_match(&**a, input) {
+                    Err(()) => self.try_match(&**b, input),
                     res@Ok(_) => res,
                 },
-            _ => fail!("Unimplemented"),
+            Iter(ref a) =>
+                match self.try_match(&**a, input) {
+                    Err(()) => Ok( (List(vec!()), input) ),
+                    Ok((List(v), vs)) => {
+                        // v is a List(Vec<Value<A>>)
+                        // the try_match().val0() is also a List(Vec<Value<A>>)
+                        // we want to join the two vecs and wrap it up in a List
+                        match self.try_match(e, vs) {
+                            Ok((List(w), rem)) => Ok( (List(append_all_move(v, w)), rem) ),
+                            _ => unreachable!(),
+                        }
+                    },
+                    Ok(_) => unreachable!(),
+                },
+            NegLookahead(ref a) => {
+                fail!("Unimplemented")
+            },
         }
     }
 }
