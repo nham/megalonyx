@@ -29,8 +29,12 @@ type MatchReturn<'a, A> = (Value<A>, Values<'a, A>);
 
 type Values<'a, A> = &'a [Value<A>];
 
-impl<A, N> Grammar<A, N> where A: Clone + Eq, N: Eq + hash::Hash {
-
+// my only question is why Seq's value is just the value of the second application,
+// but Iter's value is a list of the value from each application
+impl<A, N> Grammar<A, N>
+where A: Clone + Eq,
+      N: Eq + hash::Hash
+{
     fn try_match<'a>(&self, e: &ParsingExpr<A, N>, input: Values<'a, A>)
         -> Result<MatchReturn<'a, A>, ()> {
 
@@ -43,6 +47,16 @@ impl<A, N> Grammar<A, N> where A: Clone + Eq, N: Eq + hash::Hash {
                 }
             },
             Nonterminal(ref n) => self.try_match( self.rules.find(n).unwrap(), input ),
+            Seq(ref e, ref f) =>
+                match self.try_match(&**e, input) {
+                    Err(()) => Err(()),
+                    Ok((_, vs)) => self.try_match(&**f, vs),
+                },
+            Alt(ref e, ref f) =>
+                match self.try_match(&**e, input) {
+                    Err(()) => self.try_match(&**f, input),
+                    res@Ok(_) => res,
+                },
             _ => fail!("Unimplemented"),
         }
     }
