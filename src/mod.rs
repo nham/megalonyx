@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash;
 
 // p. 29 of Warth's thesis.
 // currently missing bindings, semantic actions, list patterns
@@ -28,24 +29,20 @@ type MatchReturn<'a, A> = (Value<A>, Values<'a, A>);
 
 type Values<'a, A> = &'a [Value<A>];
 
-impl<A, N> Grammar<A, N> {
-    fn try_match<'a, A, N>(&self, e: ParsingExpr<A, N>, input: Values<'a, A>)
-        -> Result<MatchReturn<'a, A>, ()>
-        where A: Clone + Eq {
+impl<A, N> Grammar<A, N> where A: Clone + Eq, N: Eq + hash::Hash {
 
-        match e {
+    fn try_match<'a>(&self, e: &ParsingExpr<A, N>, input: Values<'a, A>)
+        -> Result<MatchReturn<'a, A>, ()> {
+
+        match *e {
             Nil => Ok((Zilch, input)),
-            Atomic(a) => {
+            Atomic(ref a) => {
                 match input {
-                    [ref b, ..rest] if *b == At(a) => Ok((b.clone(), rest)),
+                    [At(ref b), ..rest] if b == a => Ok((At(b.clone()), rest)),
                     _ => Err(()),
                 }
             },
-            Nonterminal(n) => {
-                //match try_match(
-                fail!("Unimplemented");
-
-            },
+            Nonterminal(ref n) => self.try_match( self.rules.find(n).unwrap(), input ),
             _ => fail!("Unimplemented"),
         }
     }
