@@ -167,7 +167,7 @@ fn generate_parser_expr(
             quote_expr!(cx,
                 match $parser {
                     Ok(rem) => Ok(rem),
-                    Err(e) => Ok($input_ident),
+                    Err(_) => Ok($input_ident),
                 }
             )
         },
@@ -227,7 +227,7 @@ fn generate_alt_parser(
         let parser2 = generate_alt_parser(cx, exprs.slice_from(1), input_ident);
         quote_expr!(cx,
             match $parser {
-                Err(e) => $parser2,
+                Err(_) => $parser2,
                 Ok(rem) => Ok(rem),
             }
         )
