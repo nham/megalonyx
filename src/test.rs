@@ -507,8 +507,31 @@ mod test {
         assert_eq!(exp_recognizer::parse("012"), Ok("12"));
         assert_eq!(exp_recognizer::parse("123"), Ok(""));
         assert_eq!(exp_recognizer::parse("123 + 45"), Ok(""));
-        assert_eq!(exp_recognizer::parse("123 - 45"), Ok(""));
+        assert_eq!(exp_recognizer::parse("123 - 405"), Ok(""));
         assert_eq!(exp_recognizer::parse("123 * 45"), Ok(""));
         assert_eq!(exp_recognizer::parse("123 / 45"), Ok(""));
+    }
+
+    #[test]
+    fn test_semantic_actions() {
+        mega!(
+            grammar vowels {
+                //letter = c:["aeiou"] n:num -> String {
+                letter = ["aeiou"] num -> String {
+                    let k: uint = from_str(n).unwrap();
+                    let mut s = String::new();
+
+                    for i in range(0, k) {
+                        s.push_str(c);
+                    }
+
+                }
+
+                nz_dig = ["123456789"]
+                num = nz_dig ('0' / nz_dig)* / '0'
+            }
+        )
+
+        ()
     }
 }
