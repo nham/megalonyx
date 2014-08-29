@@ -1,3 +1,5 @@
+use std::gc::Gc;
+
 use libsyn;
 
 pub enum Expression_<N> {
@@ -25,7 +27,13 @@ pub struct Grammar {
 
 pub struct Rule {
     pub name: libsyn::Ident,
-    pub expr: Box<Expression>
+    pub expr: Expression,
+    pub action: Option<RuleAction>,
+}
+
+pub struct RuleAction {
+    ty: Gc<libsyn::Ty>,
+    expr: Gc<libsyn::Expr>,
 }
 
 #[deriving(Show)]
@@ -76,7 +84,23 @@ fn parse_rule(parser: &mut libsyn::Parser) -> Rule {
     let name = parser.parse_ident();
     parser.expect(&libsyn::EQ);
     match parse_rule_expr(parser) {
-        Ok(expr) => Rule { name: name, expr: box expr },
+        Ok(expr) => {
+            // have to check if theres an action for this rule
+            let action = match parser.token {
+                libsyn::RARROW => {
+                    parser.bump();
+                    // don't really understand what the parameter of parse_ty does
+                    let ty = parser.parse_ty(false);
+                    let expr = parser.parse_expr();
+                    Some(RuleAction {ty: ty, expr: expr})
+                },
+                _ => None,
+            };
+
+            Rule { name: name,
+                   expr: expr,
+                   action: action, }
+        },
         Err(EndOfInput) => fail!("Unexpected end of input"),
         Err(Fail(s)) => fail!("Failed to parse rule: {}", s),
         _ => fail!("Something bad happened"),
@@ -103,6 +127,7 @@ fn parse_rule_expr(parser: &mut libsyn::Parser)
             libsyn::RBRACE => break,
             libsyn::EOF => break,
             libsyn::RPAREN => break,
+            libsyn::RARROW => break,
             libsyn::IDENT(_, _) => {
                 if parser.look_ahead(1, |t| t == &libsyn::EQ) {
                     // This means that we're at the next rule? so stop parsing?
@@ -146,6 +171,7 @@ fn parse_rule_choice(parser: &mut libsyn::Parser)
             libsyn::EOF => break,
             libsyn::RBRACE => break,
             libsyn::RPAREN => break,
+            libsyn::RARROW => break,
             libsyn::BINOP(libsyn::SLASH) => {
                 parser.bump();
                 break;

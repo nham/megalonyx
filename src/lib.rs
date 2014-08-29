@@ -20,11 +20,11 @@ pub fn plugin_registrar(reg: &mut Registry) {
   reg.register_macro("mega", expand)
 }
 
-fn expand(
-    cx: &mut libsyn::ExtCtxt, 
+fn expand<'cx>(
+    cx: &'cx mut libsyn::ExtCtxt,
     _sp: libsyn::Span, 
     tts: &[libsyn::TokenTree]
-) -> Box<libsyn::MacResult> {
+) -> Box<libsyn::MacResult+'cx> {
 
     let mut parser = libsyn::new_parser_from_tts(cx.parse_sess(),
                                                  cx.cfg(),
@@ -37,8 +37,8 @@ fn expand(
             let input = libsyn::Ident::new(libsyn::intern("input"));
 
             let mut rule_parsers = Vec::new();
-            for (n, e) in g.rules.iter() {
-                rule_parsers.push( generate_parser(cx, *n, e, input));
+            for (n, d) in g.rules.iter() {
+                rule_parsers.push( generate_parser(cx, *n, &d.expr, input));
             }
 
             let grammar_name = g.name;
