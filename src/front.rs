@@ -3,7 +3,7 @@ use libsyn;
 pub enum Expression_<N> {
     Empty,
     Terminal(char),
-    AnyTerminal, // any terminal
+    AnyTerminal, // dot operator ('.')
     TerminalString(String), // not in Ford's paper. more compact than a Seq of terminals
     Nonterminal(N),
     Seq(Vec<Expression_<N>>),
@@ -137,7 +137,7 @@ fn parse_rule_expr(parser: &mut libsyn::Parser)
 //
 //     choice1 / choice2 / ...
 //
-// then this function will parse choice1
+// then this function will parse choice1 (and discard the slash that follows)
 fn parse_rule_choice(parser: &mut libsyn::Parser)
 -> Result<Expression, ParseError> {
     let mut chunks = vec!();
@@ -210,8 +210,7 @@ fn parse_rule_chunk_no_prefix(parser: &mut libsyn::Parser)
             parser.bump();
             Ok( Optional(box expr) )
         },
-        _ => Ok(expr), // this is probably not right. need to check
-                       // if its the next rule or whatever
+        _ => Ok(expr),
     }
 }
 
@@ -270,7 +269,6 @@ fn parse_primary(parser: &mut libsyn::Parser) -> Result<Expression, ParseError> 
                 Ok(Nonterminal(id))
             }
         },
-        libsyn::EOF => {println!("returning EOI from parse_primary"); Err(EndOfInput)},
         _ => {
             Err(Fail(format!("Couldn't find any non-prefix to parse")))
         },
