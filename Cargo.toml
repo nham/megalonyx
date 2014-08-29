@@ -1,0 +1,16 @@
+[package]
+
+name = "megalonyx"
+version = "0.0.1"
+authors = ["Nick Hamann"]
+
+[[lib]]
+
+name = "megalonyx"
+path = "src/lib.rs"
+crate_type = ["dylib"]
+
+[[bin]]
+
+name = "megalonyx_test"
+path = "src/test.rs"
