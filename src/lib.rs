@@ -17,7 +17,7 @@ mod back;
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-  reg.register_macro("auk", expand)
+  reg.register_macro("mega", expand)
 }
 
 fn expand(

@@ -1,35 +1,15 @@
 #![feature(phase)]
 
-#[phase(plugin)] extern crate auk;
-extern crate auk;
+#[phase(plugin)] extern crate megalonyx;
+extern crate megalonyx;
 
-fn main() {
-    // no left recursion
-    auk!(
-        grammar exp_recognizer {
-            exp = num '+' num
-//                / num '-' num
-//                / num '*' num
-//                / num '/' num
-                / num
-            dig = ["0123456789"]
-            num = dig+
-        }
-    )
-
-    println!("{}", exp_recognizer::parse("1"));
-    println!("{}", exp_recognizer::parse("123"));
-    println!("{}", exp_recognizer::parse("123 + 45"));
-    println!("{}", exp_recognizer::parse("123 - 45"));
-    println!("{}", exp_recognizer::parse("123 * 45"));
-    println!("{}", exp_recognizer::parse("123 / 45"));
-}
+fn main() {}
 
 #[cfg(test)]
 mod test {
     #[test]
     fn test_char() {
-        auk!(
+        mega!(
             grammar achar {
                 start = 'z'
             }
@@ -42,7 +22,7 @@ mod test {
 
     #[test]
     fn test_str() {
-        auk!(
+        mega!(
             grammar astr {
                 start = "abc"
             }
@@ -55,7 +35,7 @@ mod test {
 
     #[test]
     fn test_dot() {
-        auk!(
+        mega!(
             grammar dot {
                 start = .
             }
@@ -67,7 +47,7 @@ mod test {
 
     #[test]
     fn test_class() {
-        auk!(
+        mega!(
             grammar vowels {
                 start = ["aeiou"]
             }
@@ -84,31 +64,31 @@ mod test {
 
     #[test]
     fn test_opt() {
-        auk!(
+        mega!(
             grammar zopt {
                 start = 'z'?
             }
         )
 
-        auk!(
+        mega!(
             grammar dotopt {
                 start = .?
             }
         )
 
-        auk!(
+        mega!(
             grammar abcopt {
                 start = "abc"?
             }
         )
 
-        auk!(
+        mega!(
             grammar vowelopt {
                 start = ["aeiou"]?
             }
         )
 
-        auk!(
+        mega!(
             grammar parenopt {
                 start = ('z' / "abc" / ["aeiou"])?
             }
@@ -147,31 +127,31 @@ mod test {
 
     #[test]
     fn test_star() {
-        auk!(
+        mega!(
             grammar zstar {
                 start = 'z'*
             }
         )
 
-        auk!(
+        mega!(
             grammar dotstar {
                 start = .*
             }
         )
 
-        auk!(
+        mega!(
             grammar abcstar {
                 start = "abc"*
             }
         )
 
-        auk!(
+        mega!(
             grammar vowelstar {
                 start = ["aeiou"]*
             }
         )
 
-        auk!(
+        mega!(
             grammar parenstar {
                 start = ('z' / "abc" / ["aeiou"])*
             }
@@ -205,31 +185,31 @@ mod test {
 
     #[test]
     fn test_plus() {
-        auk!(
+        mega!(
             grammar zplus {
                 start = 'z'+
             }
         )
 
-        auk!(
+        mega!(
             grammar dotplus {
                 start = .+
             }
         )
 
-        auk!(
+        mega!(
             grammar abcplus {
                 start = "abc"+
             }
         )
 
-        auk!(
+        mega!(
             grammar vowelplus {
                 start = ["aeiou"]+
             }
         )
 
-        auk!(
+        mega!(
             grammar parenplus {
                 start = ('z' / "abc" / ["aeiou"])+
             }
@@ -263,37 +243,37 @@ mod test {
 
     #[test]
     fn test_neglookahead() {
-        auk!(
+        mega!(
             grammar zneg {
                 start = !'z'
             }
         )
 
-        auk!(
+        mega!(
             grammar abcneg {
                 start = !"abc"
             }
         )
 
-        auk!(
+        mega!(
             grammar dotneg {
                 start = !.
             }
         )
 
-        auk!(
+        mega!(
             grammar vowelsneg {
                 start = !["aeiou"]
             }
         )
 
-        auk!(
+        mega!(
             grammar e_star_neg {
                 start = !'e'*
             }
         )
 
-        auk!(
+        mega!(
             grammar e_plus_neg {
                 start = !'e'+
             }
@@ -327,37 +307,37 @@ mod test {
 
     #[test]
     fn test_poslookahead() {
-        auk!(
+        mega!(
             grammar zpos {
                 start = &'z'
             }
         )
 
-        auk!(
+        mega!(
             grammar abcpos {
                 start = &"abc"
             }
         )
 
-        auk!(
+        mega!(
             grammar dotpos {
                 start = &.
             }
         )
 
-        auk!(
+        mega!(
             grammar vowelspos {
                 start = &["aeiou"]
             }
         )
 
-        auk!(
+        mega!(
             grammar e_star_pos {
                 start = &'e'*
             }
         )
 
-        auk!(
+        mega!(
             grammar e_plus_pos {
                 start = &'e'+
             }
@@ -391,19 +371,19 @@ mod test {
 
     #[test]
     fn test_seq() {
-        auk!(
+        mega!(
             grammar seq1 {
                 start = "abc" "def"
             }
         )
 
-        auk!(
+        mega!(
             grammar seq2 {
                 start = 'x' 'y'
             }
         )
 
-        auk!(
+        mega!(
             grammar alt3 {
                 start = "bbc" ["aeiou"]? 'z'
             }
@@ -430,19 +410,19 @@ mod test {
 
     #[test]
     fn test_alt() {
-        auk!(
+        mega!(
             grammar alt1 {
                 start = "abc" / "def"
             }
         )
 
-        auk!(
+        mega!(
             grammar alt2 {
                 start = 'x' / 'y'
             }
         )
 
-        auk!(
+        mega!(
             grammar alt3 {
                 start = "bbc" / ["aeiou"] / 'z'
             }
@@ -473,7 +453,7 @@ mod test {
 
     #[test]
     fn test_parens() {
-        auk!(
+        mega!(
             grammar zparens {
                 start = ((('z')))
             }
@@ -486,7 +466,7 @@ mod test {
 
     #[test]
     fn test_greedy_choice() {
-        auk!(
+        mega!(
             grammar vowels_abc {
                 start = ["aeiou"] / "abc"
             }
@@ -498,14 +478,14 @@ mod test {
 
     #[test]
     fn test_multiple_rules() {
-        auk!(
+        mega!(
             grammar vowels_abc {
                 arule = another / ["aeiou"]
                 another = "abc"
             }
         )
 
-        auk!(
+        mega!(
             grammar exp_recognizer {
                 exp = num sp '+' sp num
                     / num sp '-' sp num
