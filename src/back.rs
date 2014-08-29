@@ -13,7 +13,7 @@ pub fn generate_parser(
 ) -> Gc<libsyn::Item> {
     let parser_contents = generate_parser_expr(cx, expr, input_ident);
     let qi = quote_item!(cx,
-        fn $rule_name<'a>(input: &'a str) -> Result<&'a str, String> {
+        fn $rule_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
             $parser_contents
         }
     );
