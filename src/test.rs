@@ -492,8 +492,8 @@ mod test {
                     / num sp '*' sp num
                     / num sp '/' sp num
                     / sp num sp
-                dig = ["0123456789"]
-                num = dig+
+                nz_dig = ["123456789"]
+                num = nz_dig ('0' / nz_dig)* / '0'
                 sp = [" \r\n\t"]*
             }
         )
@@ -502,7 +502,9 @@ mod test {
         assert_eq!(vowels_abc::parse("abc"), Ok(""));
 
         assert!(exp_recognizer::parse("").is_err());
+        assert_eq!(exp_recognizer::parse("0"), Ok(""));
         assert_eq!(exp_recognizer::parse("1"), Ok(""));
+        assert_eq!(exp_recognizer::parse("012"), Ok("12"));
         assert_eq!(exp_recognizer::parse("123"), Ok(""));
         assert_eq!(exp_recognizer::parse("123 + 45"), Ok(""));
         assert_eq!(exp_recognizer::parse("123 - 45"), Ok(""));

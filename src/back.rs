@@ -119,7 +119,7 @@ fn generate_parser_expr(
             let new_fn_name = libsyn::gensym_ident("star");
             quote_expr!(cx,
                 {
-                    fn $new_fn_name<'a>(input: &'a str) -> Result<&'a str, String> {
+                    fn $new_fn_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
                         $parser
                     }
 
@@ -139,7 +139,7 @@ fn generate_parser_expr(
             let new_fn_name = libsyn::gensym_ident("plus");
             quote_expr!(cx,
                 {
-                    fn $new_fn_name<'a>(input: &'a str) -> Result<&'a str, String> {
+                    fn $new_fn_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
                         $parser
                     }
 
