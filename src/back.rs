@@ -17,7 +17,7 @@ pub fn generate_parser(
     let parser_contents = generate_parser_expr(cx, expr, input_ident);
     let qi = quote_item!(cx,
         fn $rule_name<'a>($input_ident: &'a str)
-        -> Result<($action_ty, &'a str), String> {
+        -> Result<ParseResult<'a, $action_ty>, String> {
             match $parser_contents {
                 Err(e) => Err(e),
                 Ok(s) => Ok(($action_expr, s)),
@@ -28,6 +28,9 @@ pub fn generate_parser(
     qi.unwrap()
 }
 
+// Generate parsing code for a single Megalonyx expression
+// This must be an expression, since generate_parser() will just wrap it up
+// in a function
 fn generate_parser_expr(
     cx: &mut libsyn::ExtCtxt,
     expr: &Expression,

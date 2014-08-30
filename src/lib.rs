@@ -47,40 +47,29 @@ fn expand<'cx>(
 
             let grammar_name = g.name;
             let start_rule = g.start;
-            let qi = match g.rules.find(&g.start).unwrap().action {
-                Some(a) => {
-                    let start_action_ty = a.ty;
 
-                    quote_item!(cx,
-                        mod $grammar_name {
-                            pub fn parse<'a>(input: &'a str)
-                            -> Result<$start_action_ty, String> {
-                                match $start_rule(input) {
-                                    Err(e) => Err(e),
-                                    Ok(s) => Ok(s.val0()),
-                                }
-                            }
-
-                            $rule_parsers
-                        }
-                    )
-                },
-                None => {
-                    quote_item!(cx,
-                        mod $grammar_name {
-                            pub fn parse<'a>(input: &'a str)
-                            -> Result<&'a str, String> {
-                                match $start_rule(input) {
-                                    Err(e) => Err(e),
-                                    Ok(s) => Ok(s.val1()),
-                                }
-                            }
-
-                            $rule_parsers
-                        }
-                    )
-                }
+            // see below in qi for where 's' comes in to play
+            let (return_ty, ok_val) = match g.rules.find(&g.start).unwrap().action {
+                Some(a) => ( a.ty, quote_expr!(&*cx, s.val0()) ),
+                None => ( quote_ty!(&*cx, &'a str), quote_expr!(&*cx, s.val1()) ),
             };
+
+            let qi =
+                quote_item!(cx,
+                    mod $grammar_name {
+                        type ParseResult<'a, T> = (T, &'a str);
+
+                        pub fn parse<'a>(input: &'a str)
+                        -> Result<$return_ty, String> {
+                            match $start_rule(input) {
+                                Err(e) => Err(e),
+                                Ok(s) => Ok($ok_val),
+                            }
+                        }
+
+                        $rule_parsers
+                    }
+                );
 
             libsyn::MacItem::new( qi.unwrap() )
         },
