@@ -1,7 +1,7 @@
 use libsyn;
 use front::{Terminal, AnyTerminal, TerminalString, PosLookahead, NegLookahead,
             Class, ZeroOrMore, OneOrMore, Optional, Seq, Alt, Nonterminal,
-            Expression, RuleAction};
+            Label, Expression, RuleAction};
 
 use std::gc::Gc;
 
@@ -193,6 +193,10 @@ fn generate_parser_expr(
             } else {
                 generate_alt_parser(cx, v.as_slice(), input_ident)
             }
+        },
+        Label(_, ref e) => {
+            // FIXME: currently ignoring bindings
+            generate_parser_expr(cx, &**e, input_ident)
         },
         _ => fail!("Unimplemented"),
     }

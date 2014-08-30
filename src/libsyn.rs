@@ -6,5 +6,6 @@ pub use syntax::parse::parser::Parser;
 pub use syntax::parse::token::{IDENT, LBRACE, RBRACE, EQ, NOT, BINOP, AND, LIT_CHAR,
                                LIT_STR, DOT, LBRACKET, RBRACKET, STAR, PLUS,
                                QUESTION, EOF, SLASH, LPAREN, RPAREN, RARROW,
+                               COLON,
                                get_name, intern, gensym_ident};
 pub use syntax::ast::ExprBlock;

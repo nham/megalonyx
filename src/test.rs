@@ -525,7 +525,7 @@ mod test {
                         s.push_str(c);
                     }
                 */
-                letter = ["aeiou"] num -> String {
+                letter = c:["aeiou"] n:num -> String {
                     "hello".to_string()
                 }
 

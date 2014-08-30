@@ -16,6 +16,7 @@ pub enum Expression_<N> {
     PosLookahead(Box<Expression_<N>>), // & predicate in Ford's paper
     NegLookahead(Box<Expression_<N>>), // ! predicate in Ford's paper
     Class(String),
+    Label(libsyn::Ident, Box<Expression_<N>>), // (label : expr) for binding
 }
 
 pub type Expression = Expression_<libsyn::Ident>;
@@ -111,7 +112,8 @@ fn parse_rule(parser: &mut libsyn::Parser) -> Rule {
 //
 // Definition = Identifier SP '=' SP Expression
 // Expression = Sequence (SP '/' SP Sequence)*
-// Sequence   = Chunk*
+// Sequence   = (BoundChunk / Chunk)*
+// BoundChunk = Label SP ':' SP Chunk
 // Chunk      = PRED? SP Primary SP AMOUNT?
 // Primary    = Identifier !(SP '=')
 //             / '(' SP Expression SP ')'
@@ -133,7 +135,7 @@ fn parse_rule_expr(parser: &mut libsyn::Parser)
                     // This means that we're at the next rule? so stop parsing?
                     break
                 } else {
-                    // code duplication :(
+                    // FIXME: this code duplication must stop
                     match parse_rule_choice(parser) {
                         Err(e) => return Err(e),
                         Ok(expr) => choices.push(expr),
@@ -211,7 +213,23 @@ fn parse_rule_chunk(parser: &mut libsyn::Parser)
                 Ok(expr) => Ok(NegLookahead(box expr)),
             }
         },
-        _ => parse_rule_chunk_no_prefix(parser),
+        _ =>
+            match parser.token {
+                // FIXME: this code duplication must stop
+                libsyn::IDENT(id, _) => {
+                    if parser.look_ahead(1, |t| t == &libsyn::COLON) {
+                        parser.bump();
+                        parser.bump();
+                        match parse_rule_chunk(parser) {
+                            Err(e) => Err(e),
+                            Ok(expr) => Ok(Label(id, box expr)),
+                        }
+                    } else {
+                        parse_rule_chunk_no_prefix(parser)
+                    }
+                },
+                _ => parse_rule_chunk_no_prefix(parser),
+            },
     }
 }
 
