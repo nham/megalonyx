@@ -32,8 +32,8 @@ pub struct Rule {
 }
 
 pub struct RuleAction {
-    ty: Gc<libsyn::Ty>,
-    expr: Gc<libsyn::Expr>,
+    pub ty: Gc<libsyn::Ty>,
+    pub expr: Gc<libsyn::Expr>,
 }
 
 #[deriving(Show)]

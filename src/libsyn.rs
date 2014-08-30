@@ -1,4 +1,4 @@
-pub use syntax::ast::{Expr, Ident, Item, SpannedIdent, TokenTree, Ty};
+pub use syntax::ast::{Expr, Ident, Item, SpannedIdent, TokenTree, Ty, TyNil};
 pub use syntax::codemap::Span;
 pub use syntax::ext::base::{ExtCtxt, MacResult, MacExpr, MacItem};
 pub use syntax::parse::new_parser_from_tts;

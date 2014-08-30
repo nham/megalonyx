@@ -515,16 +515,18 @@ mod test {
     #[test]
     fn test_semantic_actions() {
         mega!(
-            grammar vowels {
-                //letter = c:["aeiou"] n:num -> String {
-                letter = ["aeiou"] num -> String {
+            grammar foo {
+                /*
+                letter = c:["aeiou"] n:num -> String {
                     let k: uint = from_str(n).unwrap();
                     let mut s = String::new();
 
                     for i in range(0, k) {
                         s.push_str(c);
                     }
-
+                */
+                letter = ["aeiou"] num -> String {
+                    "hello".to_string()
                 }
 
                 nz_dig = ["123456789"]
@@ -532,6 +534,10 @@ mod test {
             }
         )
 
-        ()
+        let s: Result<String, String> = Ok("hello".to_string());
+        assert_eq!(foo::parse("a0"), s);
+        assert_eq!(foo::parse("e123"), s);
+        assert_eq!(foo::parse("i4057"), s);
+        assert!(foo::parse("").is_err());
     }
 }

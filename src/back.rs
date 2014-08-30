@@ -1,20 +1,26 @@
 use libsyn;
 use front::{Terminal, AnyTerminal, TerminalString, PosLookahead, NegLookahead,
             Class, ZeroOrMore, OneOrMore, Optional, Seq, Alt, Nonterminal,
-            Expression};
+            Expression, RuleAction};
 
 use std::gc::Gc;
 
 pub fn generate_parser(
     cx: &mut libsyn::ExtCtxt,
     rule_name: libsyn::Ident,
+    action_ty: Gc<libsyn::Ty>,
+    action_expr: Gc<libsyn::Expr>,
     expr: &Expression,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Item> {
     let parser_contents = generate_parser_expr(cx, expr, input_ident);
     let qi = quote_item!(cx,
-        fn $rule_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
-            $parser_contents
+        fn $rule_name<'a>($input_ident: &'a str)
+        -> Result<($action_ty, &'a str), String> {
+            match $parser_contents {
+                Err(e) => Err(e),
+                Ok(s) => Ok(($action_expr, s)),
+            }
         }
     );
 
@@ -71,7 +77,10 @@ fn generate_parser_expr(
         },
         Nonterminal(n) => {
             quote_expr!(cx,
-                $n($input_ident)
+                match $n($input_ident) {
+                    Err(e) => Err(e),
+                    Ok(s) => Ok(s.val1()),
+                }
             )
         },
         PosLookahead(ref e) => {

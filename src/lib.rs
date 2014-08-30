@@ -38,21 +38,52 @@ fn expand<'cx>(
 
             let mut rule_parsers = Vec::new();
             for (n, d) in g.rules.iter() {
-                rule_parsers.push( generate_parser(cx, *n, &d.expr, input));
+                let (action_ty, action_expr) = match d.action {
+                    Some(a) => (a.ty, a.expr),
+                    None => (quote_ty!(&*cx, ()), quote_expr!(&*cx, ())),
+                };
+
+                rule_parsers.push( generate_parser(cx, *n, action_ty,
+                                                   action_expr, &d.expr, input));
             }
 
             let grammar_name = g.name;
             let start_rule = g.start;
-            let qi =
-                quote_item!(cx,
-                    mod $grammar_name {
-                        pub fn parse<'a>(input: &'a str) -> Result<&'a str, String> {
-                            $start_rule(input)
-                        }
+            let qi = match g.rules.find(&g.start).unwrap().action {
+                Some(a) => {
+                    let start_action_ty = a.ty;
 
-                        $rule_parsers
-                    }
-                );
+                    quote_item!(cx,
+                        mod $grammar_name {
+                            pub fn parse<'a>(input: &'a str)
+                            -> Result<$start_action_ty, String> {
+                                match $start_rule(input) {
+                                    Err(e) => Err(e),
+                                    Ok(s) => Ok(s.val0()),
+                                }
+                            }
+
+                            $rule_parsers
+                        }
+                    )
+                },
+                None => {
+                    quote_item!(cx,
+                        mod $grammar_name {
+                            pub fn parse<'a>(input: &'a str)
+                            -> Result<&'a str, String> {
+                                match $start_rule(input) {
+                                    Err(e) => Err(e),
+                                    Ok(s) => Ok(s.val1()),
+                                }
+                            }
+
+                            $rule_parsers
+                        }
+                    )
+                }
+            };
+
             libsyn::MacItem::new( qi.unwrap() )
         },
     }
