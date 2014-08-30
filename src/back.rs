@@ -5,14 +5,15 @@ use front::{Terminal, AnyTerminal, TerminalString, PosLookahead, NegLookahead,
 
 use std::gc::Gc;
 
+// Generate a parser for a rule
 pub fn generate_parser(
     cx: &mut libsyn::ExtCtxt,
     rule_name: libsyn::Ident,
     action_ty: Gc<libsyn::Ty>,
     action_expr: Gc<libsyn::Expr>,
     expr: &Expression,
-    input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Item> {
+    let input_ident = libsyn::Ident::new(libsyn::intern("input"));
     let parser_contents = generate_parser_expr(cx, expr, input_ident);
     let qi = quote_item!(cx,
         fn $rule_name<'a>($input_ident: &'a str)

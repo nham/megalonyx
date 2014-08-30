@@ -34,8 +34,6 @@ fn expand<'cx>(
     match convert(grammar) {
         None => fail!("Conversion didn't work."),
         Some(g) => {
-            let input = libsyn::Ident::new(libsyn::intern("input"));
-
             let mut rule_parsers = Vec::new();
             for (n, d) in g.rules.iter() {
                 let (action_ty, action_expr) = match d.action {
@@ -44,7 +42,7 @@ fn expand<'cx>(
                 };
 
                 rule_parsers.push( generate_parser(cx, *n, action_ty,
-                                                   action_expr, &d.expr, input));
+                                                   action_expr, &d.expr));
             }
 
             let grammar_name = g.name;
