@@ -252,17 +252,13 @@ impl<'a> Compiler<'a> {
 
     fn gen_star_parser(&self, exp: &Expression, input_ident: libsyn::Ident)
     -> Gc<libsyn::Expr> {
-        let parser = self.generate_parser_expr(exp, input_ident);
-        let new_fn_name = libsyn::gensym_ident("star");
+        let inp_ident = libsyn::Ident::new(libsyn::intern("inp"));
+        let parser = self.generate_parser_expr(exp, inp_ident);
         quote_expr!(self.cx,
             {
-                fn $new_fn_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
-                    $parser
-                }
-
                 let mut inp = $input_ident;
                 loop {
-                    match $new_fn_name(inp) {
+                    match $parser {
                         Ok(rem) => inp = rem,
                         Err(_) => break,
                     }
@@ -274,22 +270,18 @@ impl<'a> Compiler<'a> {
 
     fn gen_plus_parser(&self, exp: &Expression, input_ident: libsyn::Ident)
     -> Gc<libsyn::Expr> {
-        let parser = self.generate_parser_expr(exp, input_ident);
-        let new_fn_name = libsyn::gensym_ident("plus");
+        let inp_ident = libsyn::Ident::new(libsyn::intern("inp"));
+        let parser = self.generate_parser_expr(exp, inp_ident);
         quote_expr!(self.cx,
             {
-                fn $new_fn_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
-                    $parser
-                }
-
                 let mut inp = $input_ident;
-                match $new_fn_name(inp) {
+                match $parser {
                     Err(e) => Err(e),
                     Ok(rem) => {
                         inp = rem;
 
                         loop {
-                            match $new_fn_name(inp) {
+                            match $parser {
                                 Ok(rem) => inp = rem,
                                 Err(_) => break,
                             }
