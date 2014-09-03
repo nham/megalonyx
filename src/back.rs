@@ -2,8 +2,28 @@ use libsyn;
 use front::{Terminal, AnyTerminal, TerminalString, PosLookahead, NegLookahead,
             Class, ZeroOrMore, OneOrMore, Optional, Seq, Alt, Nonterminal,
             Label, Expression, RuleAction};
+use middle::Grammar;
 
 use std::gc::Gc;
+
+pub fn generate_parsers(
+    cx: &mut libsyn::ExtCtxt,
+    grammar: &Grammar,
+) -> Vec<Gc<libsyn::Item>> {
+    let mut rule_parsers = Vec::new();
+    for (n, d) in grammar.rules.iter() {
+        let (action_ty, action_expr) = match d.action {
+            Some(a) => (a.ty, a.expr),
+            None => (quote_ty!(&*cx, ()), quote_expr!(&*cx, ())),
+        };
+
+        rule_parsers.push( generate_parser(cx, *n, action_ty,
+                                           action_expr, &d.expr));
+    }
+
+    rule_parsers
+}
+
 
 // Generate a parser for a rule
 pub fn generate_parser(

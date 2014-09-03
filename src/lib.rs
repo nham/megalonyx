@@ -6,7 +6,7 @@ extern crate syntax;
 
 use front::parse_grammar;
 use middle::convert;
-use back::generate_parser;
+use back::generate_parsers;
 
 use rustc::plugin::Registry;
 
@@ -34,17 +34,7 @@ fn expand<'cx>(
     match convert(grammar) {
         None => fail!("Conversion didn't work."),
         Some(g) => {
-            let mut rule_parsers = Vec::new();
-            for (n, d) in g.rules.iter() {
-                let (action_ty, action_expr) = match d.action {
-                    Some(a) => (a.ty, a.expr),
-                    None => (quote_ty!(&*cx, ()), quote_expr!(&*cx, ())),
-                };
-
-                rule_parsers.push( generate_parser(cx, *n, action_ty,
-                                                   action_expr, &d.expr));
-            }
-
+            let rule_parsers = generate_parsers(cx, &g);
             let grammar_name = g.name;
             let start_rule = g.start;
 
