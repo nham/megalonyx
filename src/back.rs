@@ -15,7 +15,39 @@ impl<'a> Compiler<'a> {
         Compiler { cx: cx }
     }
 
-    pub fn generate_parsers(&self, grammar: &Grammar) -> Vec<Gc<libsyn::Item>> {
+    pub fn compile(&self, grammar: &Grammar) -> Gc<libsyn::Item> {
+        let rule_parsers = self.generate_parsers(grammar);
+        let grammar_name = grammar.name;
+        let start_rule = grammar.start;
+
+        // see below in qi for where 's' comes in to play
+        let start_action = grammar.rules.find(&start_rule).unwrap().action;
+        let (return_ty, ok_val) = match start_action {
+            Some(a) => ( a.ty, quote_expr!(&*self.cx, s.val0()) ),
+            None => ( quote_ty!(&*self.cx, &'a str),
+                      quote_expr!(&*self.cx, s.val1()) ),
+        };
+
+        let qi = quote_item!(self.cx,
+            mod $grammar_name {
+                type ParseResult<'a, T> = (T, &'a str);
+
+                pub fn parse<'a>(input: &'a str)
+                -> Result<$return_ty, String> {
+                    match $start_rule(input) {
+                        Err(e) => Err(e),
+                        Ok(s) => Ok($ok_val),
+                    }
+                }
+
+                $rule_parsers
+            }
+        );
+
+        qi.unwrap()
+    }
+
+    fn generate_parsers(&self, grammar: &Grammar) -> Vec<Gc<libsyn::Item>> {
         let mut rule_parsers = Vec::new();
         for (n, d) in grammar.rules.iter() {
             let (action_ty, action_expr) = match d.action {
@@ -33,7 +65,7 @@ impl<'a> Compiler<'a> {
 
 
     // Generate a parser for a rule
-    pub fn generate_parser(
+    fn generate_parser(
         &self,
         rule_name: libsyn::Ident,
         action_ty: Gc<libsyn::Ty>,
