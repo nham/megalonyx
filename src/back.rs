@@ -7,7 +7,7 @@ use middle::Grammar;
 use std::gc::Gc;
 
 pub fn generate_parsers(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     grammar: &Grammar,
 ) -> Vec<Gc<libsyn::Item>> {
     let mut rule_parsers = Vec::new();
@@ -27,7 +27,7 @@ pub fn generate_parsers(
 
 // Generate a parser for a rule
 pub fn generate_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     rule_name: libsyn::Ident,
     action_ty: Gc<libsyn::Ty>,
     action_expr: Gc<libsyn::Expr>,
@@ -52,7 +52,7 @@ pub fn generate_parser(
 // This must be an expression, since generate_parser() will just wrap it up
 // in a function
 fn generate_parser_expr(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     expr: &Expression,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -111,7 +111,7 @@ fn generate_parser_expr(
 
 
 fn generate_terminal_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     c: char,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -131,7 +131,7 @@ fn generate_terminal_parser(
 }
 
 fn generate_anyterminal_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
     quote_expr!(cx,
@@ -146,7 +146,7 @@ fn generate_anyterminal_parser(
 
 
 fn generate_terminalstring_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     sl: &str,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -166,7 +166,7 @@ fn generate_terminalstring_parser(
 }
 
 fn generate_class_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     sl: &str,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -186,7 +186,7 @@ fn generate_class_parser(
 }
 
 fn generate_nonterminal_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     n: libsyn::Ident,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -199,7 +199,7 @@ fn generate_nonterminal_parser(
 }
 
 fn generate_poslookahead_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     exp: &Expression,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -216,7 +216,7 @@ fn generate_poslookahead_parser(
 }
 
 fn generate_neglookahead_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     exp: &Expression,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -233,7 +233,7 @@ fn generate_neglookahead_parser(
 }
 
 fn generate_star_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     exp: &Expression,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -258,7 +258,7 @@ fn generate_star_parser(
 }
 
 fn generate_plus_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     exp: &Expression,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -291,7 +291,7 @@ fn generate_plus_parser(
 }
 
 fn generate_opt_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     exp: &Expression,
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -305,7 +305,7 @@ fn generate_opt_parser(
 }
 
 fn generate_seq_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     exprs: &[Expression],
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
@@ -328,7 +328,7 @@ fn generate_seq_parser(
 }
 
 fn generate_alt_parser(
-    cx: &mut libsyn::ExtCtxt,
+    cx: &libsyn::ExtCtxt,
     exprs: &[Expression],
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
