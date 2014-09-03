@@ -34,7 +34,7 @@ impl<'a> Compiler<'a> {
 
                 pub fn parse<'a>(input: &'a str)
                 -> Result<$return_ty, String> {
-                    match $start_rule(input) {
+                    match $start_rule::parse(input) {
                         Err(e) => Err(e),
                         Ok(s) => Ok($ok_val),
                     }
@@ -76,11 +76,13 @@ impl<'a> Compiler<'a> {
         let parser_contents = self.generate_parser_expr(expr, input_ident);
 
         let qi = quote_item!(self.cx,
-            fn $rule_name<'a>($input_ident: &'a str)
-            -> Result<ParseResult<'a, $action_ty>, String> {
-                match $parser_contents {
-                    Err(e) => Err(e),
-                    Ok(s) => Ok(($action_expr, s)),
+            mod $rule_name {
+                pub fn parse<'a>($input_ident: &'a str)
+                -> Result<super::ParseResult<'a, $action_ty>, String> {
+                    match $parser_contents {
+                        Err(e) => Err(e),
+                        Ok(s) => Ok(($action_expr, s)),
+                    }
                 }
             }
         );
@@ -215,7 +217,7 @@ impl<'a> Compiler<'a> {
     fn gen_nonterminal_parser(&self, n: libsyn::Ident, input_ident: libsyn::Ident)
     -> Gc<libsyn::Expr> {
         quote_expr!(self.cx,
-            match $n($input_ident) {
+            match super::$n::parse($input_ident) {
                 Err(e) => Err(e),
                 Ok(s) => Ok(s.val1()),
             }
