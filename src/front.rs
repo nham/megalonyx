@@ -2,6 +2,9 @@ use std::gc::Gc;
 
 use libsyn;
 
+// so lookaheads yield a `()` value.
+// also, (label:["abc"])* will result in label being bound
+// to the last thing matched inside the star
 pub enum Expression_<N> {
     Empty,
     Terminal(char),
