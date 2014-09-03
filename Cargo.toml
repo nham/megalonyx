@@ -4,7 +4,7 @@ name = "megalonyx"
 version = "0.0.1"
 authors = ["Nick Hamann"]
 
-[[lib]]
+[lib]
 
 name = "megalonyx"
 path = "src/lib.rs"
