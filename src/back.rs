@@ -57,153 +57,36 @@ fn generate_parser_expr(
     input_ident: libsyn::Ident,
 ) -> Gc<libsyn::Expr> {
     match *expr {
-        Terminal(c) => {
-            quote_expr!(cx,
-                if $input_ident.len() > 0 {
-                    let cr = $input_ident.char_range_at(0);
-                    if cr.ch == $c {
-                        Ok($input_ident.slice_from(cr.next))
-                    } else {
-                        Err(format!("Could not match '{}': (saw '{}' instead)",
-                                    $c, cr.ch))
-                    }
-                } else {
-                    Err(format!("Could not match '{}' (end of input)", $c))
-                }
-            )
-        },
-        AnyTerminal => {
-            quote_expr!(cx,
-                if $input_ident.len() > 0 {
-                    let cr = $input_ident.char_range_at(0);
-                    Ok($input_ident.slice_from(cr.next))
-                } else {
-                    Err(format!("Could not match '.' (end of input)"))
-                }
-            )
-        },
-        TerminalString(ref s) => {
-            let sl = s.as_slice();
-            let n = s.len();
-            let nbytes = s.as_bytes().len();
-            quote_expr!(cx,
-                if $input_ident.len() >= $n {
-                    if $input_ident.starts_with($sl) {
-                        Ok($input_ident.slice_from($nbytes))
-                    } else {
-                        Err(format!("Could not match '{}': (saw '{}' instead)",
-                                    $sl, $input_ident))
-                    }
-                } else {
-                    Err(format!("Could not match '{}' (end of input)", $sl))
-                }
-            )
-        },
-        Nonterminal(n) => {
-            quote_expr!(cx,
-                match $n($input_ident) {
-                    Err(e) => Err(e),
-                    Ok(s) => Ok(s.val1()),
-                }
-            )
-        },
-        PosLookahead(ref e) => {
-            let parser = generate_parser_expr(cx, &**e, input_ident);
-            quote_expr!(cx,
-                {
-                    let res: Result<&'a str, String> = $parser;
-                    match res {
-                        Ok(_) => Ok($input_ident),
-                        Err(e) => Err(e),
-                    }
-                }
-            )
-        },
-        NegLookahead(ref e) => {
-            let parser = generate_parser_expr(cx, &**e, input_ident);
-            quote_expr!(cx,
-                {
-                    let res: Result<&'a str, String> = $parser;
-                    match res {
-                        Ok(_) => Err(format!("Could not match ! expression")),
-                        Err(_) => Ok($input_ident),
-                    }
-                }
-            )
-        },
-        Class(ref s) => {
-            let sl = s.as_slice();
-            quote_expr!(cx,
-                if $input_ident.len() > 0 {
-                    let cr = $input_ident.char_range_at(0);
-                    if $sl.find(cr.ch).is_some() {
-                        Ok($input_ident.slice_from(cr.next))
-                    } else {
-                        Err(format!("Could not match '[{}]': (saw '{}' instead)",
-                                    $sl, cr.ch))
-                    }
-                } else {
-                    Err(format!("Could not match '[{}]' (end of input)", $sl))
-                }
-            )
-        },
-        ZeroOrMore(ref e) => {
-            let parser = generate_parser_expr(cx, &**e, input_ident);
-            let new_fn_name = libsyn::gensym_ident("star");
-            quote_expr!(cx,
-                {
-                    fn $new_fn_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
-                        $parser
-                    }
+        Terminal(c) =>
+            generate_terminal_parser(cx, c, input_ident),
 
-                    let mut inp = $input_ident;
-                    loop {
-                        match $new_fn_name(inp) {
-                            Ok(rem) => inp = rem,
-                            Err(_) => break,
-                        }
-                    }
-                    Ok(inp)
-                }
-            )
-        },
-        OneOrMore(ref e) => {
-            let parser = generate_parser_expr(cx, &**e, input_ident);
-            let new_fn_name = libsyn::gensym_ident("plus");
-            quote_expr!(cx,
-                {
-                    fn $new_fn_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
-                        $parser
-                    }
+        AnyTerminal =>
+            generate_anyterminal_parser(cx, input_ident),
 
-                    let mut inp = $input_ident;
-                    match $new_fn_name(inp) {
-                        Err(e) => Err(e),
-                        Ok(rem) => {
-                            inp = rem;
+        TerminalString(ref s) =>
+            generate_terminalstring_parser(cx, s.as_slice(), input_ident),
 
-                            loop {
-                                match $new_fn_name(inp) {
-                                    Ok(rem) => inp = rem,
-                                    Err(_) => break,
-                                }
-                            }
+        Nonterminal(n) =>
+            generate_nonterminal_parser(cx, n, input_ident),
 
-                            Ok(inp)
-                        },
-                    }
-                }
-            )
-        },
-        Optional(ref e) => {
-            let parser = generate_parser_expr(cx, &**e, input_ident);
-            quote_expr!(cx,
-                match $parser {
-                    Ok(rem) => Ok(rem),
-                    Err(_) => Ok($input_ident),
-                }
-            )
-        },
+        PosLookahead(ref e) =>
+            generate_poslookahead_parser(cx, &**e, input_ident),
+
+        NegLookahead(ref e) =>
+            generate_neglookahead_parser(cx, &**e, input_ident),
+
+        Class(ref s) =>
+            generate_class_parser(cx, s.as_slice(), input_ident),
+
+        ZeroOrMore(ref e) =>
+            generate_star_parser(cx, &**e, input_ident),
+
+        OneOrMore(ref e) =>
+            generate_plus_parser(cx, &**e, input_ident),
+
+        Optional(ref e) =>
+            generate_opt_parser(cx, &**e, input_ident),
+
         Seq(ref v) => {
             if v.len() == 0 {
                 fail!("Can't interpret a sequence of zero length");
@@ -224,6 +107,201 @@ fn generate_parser_expr(
         },
         _ => fail!("Unimplemented"),
     }
+}
+
+
+fn generate_terminal_parser(
+    cx: &mut libsyn::ExtCtxt,
+    c: char,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    quote_expr!(cx,
+        if $input_ident.len() > 0 {
+            let cr = $input_ident.char_range_at(0);
+            if cr.ch == $c {
+                Ok($input_ident.slice_from(cr.next))
+            } else {
+                Err(format!("Could not match '{}': (saw '{}' instead)",
+                            $c, cr.ch))
+            }
+        } else {
+            Err(format!("Could not match '{}' (end of input)", $c))
+        }
+    )
+}
+
+fn generate_anyterminal_parser(
+    cx: &mut libsyn::ExtCtxt,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    quote_expr!(cx,
+        if $input_ident.len() > 0 {
+            let cr = $input_ident.char_range_at(0);
+            Ok($input_ident.slice_from(cr.next))
+        } else {
+            Err(format!("Could not match '.' (end of input)"))
+        }
+    )
+}
+
+
+fn generate_terminalstring_parser(
+    cx: &mut libsyn::ExtCtxt,
+    sl: &str,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    let n = sl.len();
+    quote_expr!(cx,
+        if $input_ident.len() >= $n {
+            if $input_ident.starts_with($sl) {
+                Ok($input_ident.slice_from($n))
+            } else {
+                Err(format!("Could not match '{}': (saw '{}' instead)",
+                            $sl, $input_ident))
+            }
+        } else {
+            Err(format!("Could not match '{}' (end of input)", $sl))
+        }
+    )
+}
+
+fn generate_class_parser(
+    cx: &mut libsyn::ExtCtxt,
+    sl: &str,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    quote_expr!(cx,
+        if $input_ident.len() > 0 {
+            let cr = $input_ident.char_range_at(0);
+            if $sl.find(cr.ch).is_some() {
+                Ok($input_ident.slice_from(cr.next))
+            } else {
+                Err(format!("Could not match '[{}]': (saw '{}' instead)",
+                            $sl, cr.ch))
+            }
+        } else {
+            Err(format!("Could not match '[{}]' (end of input)", $sl))
+        }
+    )
+}
+
+fn generate_nonterminal_parser(
+    cx: &mut libsyn::ExtCtxt,
+    n: libsyn::Ident,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    quote_expr!(cx,
+        match $n($input_ident) {
+            Err(e) => Err(e),
+            Ok(s) => Ok(s.val1()),
+        }
+    )
+}
+
+fn generate_poslookahead_parser(
+    cx: &mut libsyn::ExtCtxt,
+    exp: &Expression,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    let parser = generate_parser_expr(cx, exp, input_ident);
+    quote_expr!(cx,
+        {
+            let res: Result<&'a str, String> = $parser;
+            match res {
+                Ok(_) => Ok($input_ident),
+                Err(e) => Err(e),
+            }
+        }
+    )
+}
+
+fn generate_neglookahead_parser(
+    cx: &mut libsyn::ExtCtxt,
+    exp: &Expression,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    let parser = generate_parser_expr(cx, exp, input_ident);
+    quote_expr!(cx,
+        {
+            let res: Result<&'a str, String> = $parser;
+            match res {
+                Ok(_) => Err(format!("Could not match ! expression")),
+                Err(_) => Ok($input_ident),
+            }
+        }
+    )
+}
+
+fn generate_star_parser(
+    cx: &mut libsyn::ExtCtxt,
+    exp: &Expression,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    let parser = generate_parser_expr(cx, exp, input_ident);
+    let new_fn_name = libsyn::gensym_ident("star");
+    quote_expr!(cx,
+        {
+            fn $new_fn_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
+                $parser
+            }
+
+            let mut inp = $input_ident;
+            loop {
+                match $new_fn_name(inp) {
+                    Ok(rem) => inp = rem,
+                    Err(_) => break,
+                }
+            }
+            Ok(inp)
+        }
+    )
+}
+
+fn generate_plus_parser(
+    cx: &mut libsyn::ExtCtxt,
+    exp: &Expression,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    let parser = generate_parser_expr(cx, exp, input_ident);
+    let new_fn_name = libsyn::gensym_ident("plus");
+    quote_expr!(cx,
+        {
+            fn $new_fn_name<'a>($input_ident: &'a str) -> Result<&'a str, String> {
+                $parser
+            }
+
+            let mut inp = $input_ident;
+            match $new_fn_name(inp) {
+                Err(e) => Err(e),
+                Ok(rem) => {
+                    inp = rem;
+
+                    loop {
+                        match $new_fn_name(inp) {
+                            Ok(rem) => inp = rem,
+                            Err(_) => break,
+                        }
+                    }
+
+                    Ok(inp)
+                },
+            }
+        }
+    )
+}
+
+fn generate_opt_parser(
+    cx: &mut libsyn::ExtCtxt,
+    exp: &Expression,
+    input_ident: libsyn::Ident,
+) -> Gc<libsyn::Expr> {
+    let parser = generate_parser_expr(cx, exp, input_ident);
+    quote_expr!(cx,
+        match $parser {
+            Ok(rem) => Ok(rem),
+            Err(_) => Ok($input_ident),
+        }
+    )
 }
 
 fn generate_seq_parser(
