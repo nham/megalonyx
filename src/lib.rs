@@ -6,7 +6,6 @@ extern crate syntax;
 
 use front::parse_grammar;
 use middle::convert;
-use back::generate_parsers;
 
 use rustc::plugin::Registry;
 
@@ -34,7 +33,11 @@ fn expand<'cx>(
     match convert(grammar) {
         None => fail!("Conversion didn't work."),
         Some(g) => {
-            let rule_parsers = generate_parsers(cx, &g);
+            let rule_parsers = {
+                let c = back::Compiler::new(cx);
+                c.generate_parsers(&g)
+            };
+
             let grammar_name = g.name;
             let start_rule = g.start;
 
