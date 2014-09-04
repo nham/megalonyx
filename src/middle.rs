@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use syntax::parse::{ParseSess, new_parser_from_source_str, new_parse_sess};
 
 use libsyn;
 use front::{mod, Expression, RuleAction};
