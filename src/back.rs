@@ -15,6 +15,9 @@ impl<'a> Compiler<'a> {
         Compiler { cx: cx }
     }
 
+    // currently generates a module whose name is the grammar name
+    // this module contains a function called 'parse', so you call
+    // the parser by <grammar name>::parse(input)
     pub fn compile(&self, grammar: &Grammar) -> Gc<libsyn::Item> {
         let rule_parsers = self.generate_parsers(grammar);
         let grammar_name = grammar.name;
