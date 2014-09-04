@@ -182,6 +182,7 @@ impl<'a> Compiler<'a> {
     // Generate parsing code for a single Megalonyx expression
     // This must be an expression, since generate_parser() will just wrap it up
     // in a function
+    // The expression must evaluate to Result<&'a str, String>
     fn generate_parser_expr(&self, expr: &Expression, input_ident: libsyn::Ident)
     -> Gc<libsyn::Expr> {
         match *expr {
