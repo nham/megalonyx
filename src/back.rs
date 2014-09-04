@@ -128,7 +128,7 @@ impl<'a> Compiler<'a> {
         expr: &Expression,
     ) -> Gc<libsyn::Item> {
         let input_ident = libsyn::Ident::new(libsyn::intern("input"));
-        let parser_contents = self.generate_parser_expr(expr, input_ident, false);
+        let parser_contents = self.generate_parser_expr(expr, input_ident, true);
 
         let mut map: Bindings = HashMap::new();
         self.find_bindings(expr, &mut map);
@@ -196,6 +196,8 @@ impl<'a> Compiler<'a> {
                             Err(e) => Err(e),
                             Ok((_val, s)) => {
                                 $binding_lets
+
+                                let matched: &'a str = $input_ident.slice_to($input_ident.len() - s.len());
 
                                 Ok(($rule_expr, s))
                             }

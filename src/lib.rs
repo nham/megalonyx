@@ -1,3 +1,4 @@
+#![crate_name = "megalonyx"]
 #![crate_type = "dylib"]
 #![feature(plugin_registrar, quote, macro_rules)]
 
