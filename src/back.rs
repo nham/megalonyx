@@ -13,6 +13,38 @@ fn new_parser<'a>(s: &str, sess: &'a libsyn::ParseSess) -> libsyn::Parser<'a> {
                                        s.to_string())
 }
 
+
+/*
+
+other notes:
+
+    letter = c:["aeiou"] n:num -> String {
+        "hello".to_string() + c
+    }
+
+    nz_dig = ["123456789"]
+    num = nz_dig ('0' / nz_dig)* / '0'
+
+this seems like it should work. ('0' / nz_dig)* returning Vec<&str> seems super
+awkward to me. should this be special cased?
+
+also, should actual char literals and character classes return a char instead of
+a str? and then maybe Vec<char> could be special cased to be an &str instead?
+
+maybe "text" expressions (everything except non-terminals) should just return &str 
+of consumed input. this seems to make the most sense to me and eliminates a LOT of 
+problems. then we only have problems with non-terminals.
+
+also is it just me or is sequence returning the last expression's value just
+straight up wrong? if I have 
+
+    nz_dig ('0' / nz_dig)*
+
+then it would lose the initial character parsed. I definitely want that as the return value.
+
+
+*/
+
 pub struct Compiler<'a> {
     cx: &'a libsyn::ExtCtxt<'a>,
 }
@@ -96,7 +128,7 @@ impl<'a> Compiler<'a> {
         expr: &Expression,
     ) -> Gc<libsyn::Item> {
         let input_ident = libsyn::Ident::new(libsyn::intern("input"));
-        let parser_contents = self.generate_parser_expr(expr, input_ident);
+        let parser_contents = self.generate_parser_expr(expr, input_ident, false);
 
         let mut map: Bindings = HashMap::new();
         self.find_bindings(expr, &mut map);
@@ -176,6 +208,19 @@ impl<'a> Compiler<'a> {
     }
 
 
+    /*
+        The parser expr return value is a bit tricky. If we just follow the paper
+        we end up with something that is overly restrictive, because for example
+        a star expression returns a vector, so "def"* / "abc" is not allowed
+        since all arms of a choice need to have the same return type, but
+        in this case one is (Vec<&str>, &str) and the other is (&str, &str).
+
+        The other problem is that there are times when you actually do want a
+        star to return a vector, but other times when you don't.
+
+        The compromise I've come up with is to have everything return (&str, &str)
+        except when its being bound.
+    */
     fn determine_rule_return(
         &self,
         grammar: &Grammar,
@@ -200,14 +245,14 @@ impl<'a> Compiler<'a> {
                         quote_ty!(self.cx, Vec<&'a str>),
 
                     Optional(_) =>
-                        quote_ty!(self.cx, Vec<&'a str>),
+                        quote_ty!(self.cx, Option<&'a str>),
 
                     Nonterminal(id) => {
                         let rule_data = grammar.rules.find(&id).unwrap();
                         match rule_data.action {
                             None =>
                                 quote_ty!(self.cx, &'a str),
-                            Some(RuleAction { ty: ty, expr: expr }) =>
+                            Some(RuleAction { ty: ty, expr: _ }) =>
                                 ty,
                         }
                     },
@@ -225,9 +270,18 @@ impl<'a> Compiler<'a> {
     // Generate parsing code for a single Megalonyx expression
     // This must be an expression, since generate_parser() will just wrap it up
     // in a function
-    // The expression must evaluate to Result<&'a str, String>
-    fn generate_parser_expr(&self, expr: &Expression, input_ident: libsyn::Ident)
-    -> Gc<libsyn::Expr> {
+    // The expression must evaluate to Result<(T, &'a str), String>
+    // for some T.
+    //
+    // is_bound determines the value that a parsing expression returns. e.g.
+    // star and plus operators return a vector of values if theyre being bound,
+    // but just return consumed input otherwise
+    fn generate_parser_expr(
+        &self,
+        expr: &Expression,
+        input_ident: libsyn::Ident,
+        is_bound: bool,
+    ) -> Gc<libsyn::Expr> {
         match *expr {
             Terminal(c) =>
                 self.gen_terminal_parser(c, input_ident),
@@ -241,40 +295,40 @@ impl<'a> Compiler<'a> {
             Nonterminal(n) =>
                 self.gen_nonterminal_parser(n, input_ident),
 
-            PosLookahead(ref e) =>
-                self.gen_poslookahead_parser(&**e, input_ident),
-
-            NegLookahead(ref e) =>
-                self.gen_neglookahead_parser(&**e, input_ident),
-
             Class(ref s) =>
                 self.gen_class_parser(s.as_slice(), input_ident),
 
+            PosLookahead(ref e) =>
+                self.gen_poslookahead_parser(&**e, input_ident, is_bound),
+
+            NegLookahead(ref e) =>
+                self.gen_neglookahead_parser(&**e, input_ident, is_bound),
+
             ZeroOrMore(ref e) =>
-                self.gen_star_parser(&**e, input_ident),
+                self.gen_star_parser(&**e, input_ident, is_bound),
 
             OneOrMore(ref e) =>
-                self.gen_plus_parser(&**e, input_ident),
+                self.gen_plus_parser(&**e, input_ident, is_bound),
 
             Optional(ref e) =>
-                self.gen_opt_parser(&**e, input_ident),
+                self.gen_opt_parser(&**e, input_ident, is_bound),
 
             Seq(ref v) => {
                 if v.len() == 0 {
                     fail!("Can't interpret a sequence of zero length");
                 } else {
-                    self.gen_seq_parser(v.as_slice(), input_ident)
+                    self.gen_seq_parser(v.as_slice(), input_ident, is_bound)
                 }
             },
             Alt(ref v) => {
                 if v.len() == 0 {
                     fail!("Can't interpret a sequence of zero length");
                 } else {
-                    self.gen_alt_parser(v.as_slice(), input_ident)
+                    self.gen_alt_parser(v.as_slice(), input_ident, is_bound)
                 }
             },
             Label(id, ref e) => {
-                let parser = self.generate_parser_expr(&**e, input_ident);
+                let parser = self.generate_parser_expr(&**e, input_ident, true);
                 quote_expr!(self.cx,
                     match $parser {
                         Err(e) => Err(e),
@@ -365,113 +419,205 @@ impl<'a> Compiler<'a> {
         )
     }
 
-    fn gen_poslookahead_parser(&self, exp: &Expression, input_ident: libsyn::Ident)
-    -> Gc<libsyn::Expr> {
-        let parser = self.generate_parser_expr(exp, input_ident);
+    fn gen_poslookahead_parser(
+        &self,
+        exp: &Expression,
+        input_ident: libsyn::Ident,
+        is_bound: bool,
+    ) -> Gc<libsyn::Expr> {
+        let parser = self.generate_parser_expr(exp, input_ident, is_bound);
+        let val_expr = if is_bound {
+            quote_expr!(self.cx, ())
+        } else {
+            quote_expr!(self.cx, "")
+        };
+
         quote_expr!(self.cx,
             {
                 match $parser {
-                    Ok(_) => Ok(((), $input_ident)),
+                    Ok(_) => Ok(($val_expr, $input_ident)),
                     Err(e) => Err(e),
                 }
             }
         )
     }
 
-    fn gen_neglookahead_parser(&self, exp: &Expression, input_ident: libsyn::Ident)
-    -> Gc<libsyn::Expr> {
-        let parser = self.generate_parser_expr(exp, input_ident);
+    fn gen_neglookahead_parser(
+        &self,
+        exp: &Expression,
+        input_ident: libsyn::Ident,
+        is_bound: bool,
+    ) -> Gc<libsyn::Expr> {
+        let parser = self.generate_parser_expr(exp, input_ident, is_bound);
+        let val_expr = if is_bound {
+            quote_expr!(self.cx, ())
+        } else {
+            quote_expr!(self.cx, "")
+        };
         quote_expr!(self.cx,
             {
                 match $parser {
                     Ok(_) => Err(format!("Could not match ! expression")),
-                    Err(_) => Ok(((), $input_ident)),
+                    Err(_) => Ok(($val_expr, $input_ident)),
                 }
             }
         )
     }
 
-    fn gen_star_parser(&self, exp: &Expression, input_ident: libsyn::Ident)
-    -> Gc<libsyn::Expr> {
+    fn gen_star_parser(
+        &self,
+        exp: &Expression,
+        input_ident: libsyn::Ident,
+        is_bound: bool,
+    ) -> Gc<libsyn::Expr> {
         let inp_ident = libsyn::Ident::new(libsyn::intern("inp"));
-        let parser = self.generate_parser_expr(exp, inp_ident);
+        let parser = self.generate_parser_expr(exp, inp_ident, is_bound);
         // the "if true" thing is a hack for type inference
-        quote_expr!(self.cx,
-            {
-                let mut inp = $input_ident;
-                let mut vals = vec!();
-                loop {
+        if is_bound {
+            quote_expr!(self.cx,
+                {
+                    let mut inp = $input_ident;
+                    let mut vals = vec!();
+                    loop {
+                        match $parser {
+                            Ok((val, rem)) => {
+                                inp = rem;
+                                vals.push(val);
+                            },
+                            Err(_) => break,
+                        }
+                    }
+                    if true {
+                        Ok((vals, inp))
+                    } else {
+                        Err("".to_string())
+                    }
+                }
+            )
+        } else {
+            quote_expr!(self.cx,
+                {
+                    let mut inp = $input_ident;
+                    loop {
+                        match $parser {
+                            Ok((_, rem)) => inp = rem,
+                            Err(_) => break,
+                        }
+                    }
+                    if true {
+                        Ok(($input_ident.slice_to($input_ident.len() - inp.len()), 
+                            inp))
+                    } else {
+                        Err("".to_string())
+                    }
+                }
+            )
+        }
+    }
+
+    fn gen_plus_parser(
+        &self,
+        exp: &Expression,
+        input_ident: libsyn::Ident,
+        is_bound: bool,
+    ) -> Gc<libsyn::Expr> {
+        let inp_ident = libsyn::Ident::new(libsyn::intern("inp"));
+        let parser = self.generate_parser_expr(exp, inp_ident, is_bound);
+
+        if is_bound {
+            quote_expr!(self.cx,
+                {
+                    let mut inp = $input_ident;
+                    let mut vals = vec!();
                     match $parser {
+                        Err(e) => Err(e),
                         Ok((val, rem)) => {
                             inp = rem;
                             vals.push(val);
+
+                            loop {
+                                match $parser {
+                                    Ok((val, rem)) => {
+                                        inp = rem;
+                                        vals.push(val);
+                                    },
+                                    Err(_) => break,
+                                }
+                            }
+
+                            Ok((vals, inp))
                         },
-                        Err(_) => break,
                     }
                 }
-                if true {
-                    Ok((vals, inp))
-                } else {
-                    Err("".to_string())
-                }
-            }
-        )
-    }
+            )
+        } else {
+            quote_expr!(self.cx,
+                {
+                    let mut inp = $input_ident;
+                    match $parser {
+                        Err(e) => Err(e),
+                        Ok((_, rem)) => {
+                            inp = rem;
 
-    fn gen_plus_parser(&self, exp: &Expression, input_ident: libsyn::Ident)
-    -> Gc<libsyn::Expr> {
-        let inp_ident = libsyn::Ident::new(libsyn::intern("inp"));
-        let parser = self.generate_parser_expr(exp, inp_ident);
-        quote_expr!(self.cx,
-            {
-                let mut inp = $input_ident;
-                let mut vals = vec!();
-                match $parser {
-                    Err(e) => Err(e),
-                    Ok((val, rem)) => {
-                        inp = rem;
-                        vals.push(val);
-
-                        loop {
-                            match $parser {
-                                Ok((val, rem)) => {
-                                    inp = rem;
-                                    vals.push(val);
-                                },
-                                Err(_) => break,
+                            loop {
+                                match $parser {
+                                    Ok((_, rem)) => inp = rem,
+                                    Err(_) => break,
+                                }
                             }
-                        }
 
-                        Ok((vals, inp))
-                    },
+                            Ok(($input_ident.slice_to($input_ident.len() - inp.len()), 
+                                inp))
+                        },
+                    }
                 }
-            }
-        )
+            )
+        }
     }
 
-    fn gen_opt_parser(&self, exp: &Expression, input_ident: libsyn::Ident)
-    -> Gc<libsyn::Expr> {
-        let parser = self.generate_parser_expr(exp, input_ident);
-        quote_expr!(self.cx,
-            match $parser {
-                Ok((val, rem)) => Ok((vec!(val), rem)),
-                Err(_) => Ok((vec!(), $input_ident)),
-            }
-        )
+    fn gen_opt_parser(
+        &self,
+        exp: &Expression,
+        input_ident: libsyn::Ident,
+        is_bound: bool,
+    ) -> Gc<libsyn::Expr> {
+        let parser = self.generate_parser_expr(exp, input_ident, is_bound);
+        if is_bound {
+            quote_expr!(self.cx,
+                match $parser {
+                    Ok((val, rem)) => Ok((Some(val), rem)),
+                    Err(_) => Ok((None, $input_ident)),
+                }
+            )
+        } else {
+            quote_expr!(self.cx,
+                match $parser {
+                    Ok((val, rem)) =>
+                        Ok(($input_ident.slice_to($input_ident.len() - rem.len()), rem)),
+
+                    Err(_) =>
+                        Ok(("", $input_ident)),
+                }
+            )
+        }
     }
 
 
-    fn gen_seq_parser(&self, exprs: &[Expression], input_ident: libsyn::Ident)
-    -> Gc<libsyn::Expr> {
+    fn gen_seq_parser(
+        &self,
+        exprs: &[Expression],
+        input_ident: libsyn::Ident,
+        is_bound: bool,
+    ) -> Gc<libsyn::Expr> {
         if exprs.len() == 0 {
             fail!("Don't call gen_seq_parser with a slice of length 0")
         } else if exprs.len() == 1 {
-            let parser = self.generate_parser_expr(&exprs[0], input_ident);
+            let parser = self.generate_parser_expr(&exprs[0], input_ident, is_bound);
             quote_expr!(self.cx, $parser)
         } else {
-            let parser = self.generate_parser_expr(&exprs[0], input_ident);
+            let parser = self.generate_parser_expr(&exprs[0], input_ident, is_bound);
             let rem = libsyn::Ident::new(libsyn::intern("rem"));
-            let parser2 = self.gen_seq_parser(exprs.slice_from(1), rem);
+            let parser2 = self.gen_seq_parser(exprs.slice_from(1), rem, is_bound);
             quote_expr!(self.cx,
                 match $parser {
                     Err(e) => Err(e),
@@ -481,16 +627,20 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    fn gen_alt_parser(&self, exprs: &[Expression], input_ident: libsyn::Ident)
-    -> Gc<libsyn::Expr> {
+    fn gen_alt_parser(
+        &self,
+        exprs: &[Expression],
+        input_ident: libsyn::Ident,
+        is_bound: bool,
+    ) -> Gc<libsyn::Expr> {
         if exprs.len() == 0 {
             fail!("Don't call gen_alt_parser with a slice of length 0")
         } else if exprs.len() == 1 {
-            let parser = self.generate_parser_expr(&exprs[0], input_ident);
+            let parser = self.generate_parser_expr(&exprs[0], input_ident, is_bound);
             quote_expr!(self.cx, $parser)
         } else {
-            let parser = self.generate_parser_expr(&exprs[0], input_ident);
-            let parser2 = self.gen_alt_parser(exprs.slice_from(1), input_ident);
+            let parser = self.generate_parser_expr(&exprs[0], input_ident, is_bound);
+            let parser2 = self.gen_alt_parser(exprs.slice_from(1), input_ident, is_bound);
             quote_expr!(self.cx,
                 match $parser {
                     Err(_) => $parser2,
