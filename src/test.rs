@@ -4,10 +4,15 @@
 extern crate megalonyx;
 
 fn main() {
+
         mega!(
-            grammar vowels_abc {
-                arule = another / ["aeiou"]
-                another = "abc"
+            grammar foo {
+                letter = c:["aeiou"] n:num -> String {
+                    "hello".to_string() + c
+                }
+
+                nz_dig = ["123456789"]
+                num = nz_dig ('0' / nz_dig)* / '0'
             }
         )
 
@@ -494,6 +499,7 @@ mod test {
             }
         )
 
+            /*
         mega!(
             grammar exp_recognizer {
                 exp = num sp '+' sp num
@@ -506,10 +512,12 @@ mod test {
                 sp = [" \r\n\t"]*
             }
         )
+        */
 
         assert_eq!(vowels_abc::parse("oof"), Ok("of"));
         assert_eq!(vowels_abc::parse("abc"), Ok(""));
 
+        /*
         assert!(exp_recognizer::parse("").is_err());
         assert_eq!(exp_recognizer::parse("0"), Ok(""));
         assert_eq!(exp_recognizer::parse("1"), Ok(""));
@@ -519,9 +527,9 @@ mod test {
         assert_eq!(exp_recognizer::parse("123 - 405"), Ok(""));
         assert_eq!(exp_recognizer::parse("123 * 45"), Ok(""));
         assert_eq!(exp_recognizer::parse("123 / 45"), Ok(""));
+        */
     }
 
-    /*
     #[test]
     fn test_semantic_actions() {
         mega!(
@@ -551,5 +559,4 @@ mod test {
         assert_eq!(foo::parse("i4057"), s);
         assert!(foo::parse("").is_err());
     }
-        */
 }

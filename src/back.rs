@@ -63,7 +63,7 @@ impl<'a> Compiler<'a> {
         let mut rule_parsers = Vec::new();
         for (n, d) in grammar.rules.iter() {
             rule_parsers.push(
-                self.generate_parser(*n, d.action, &d.expr)
+                self.generate_parser(grammar, *n, d.action, &d.expr)
             );
         }
 
@@ -90,6 +90,7 @@ impl<'a> Compiler<'a> {
     // Generate a parser for a rule
     fn generate_parser(
         &self,
+        grammar: &Grammar,
         rule_name: libsyn::Ident,
         rule_action: Option<RuleAction>,
         expr: &Expression,
@@ -147,7 +148,8 @@ impl<'a> Compiler<'a> {
                                ));
         };
 
-        let (rule_ty, rule_expr) = self.determine_rule_return(rule_action, expr);
+        let (rule_ty, rule_expr) =
+            self.determine_rule_return(grammar, rule_action, expr);
         let qi =
             quote_item!(self.cx,
                 mod $rule_name {
@@ -176,11 +178,45 @@ impl<'a> Compiler<'a> {
 
     fn determine_rule_return(
         &self,
+        grammar: &Grammar,
         rule_action: Option<RuleAction>,
         expr: &Expression,
     ) -> (Gc<libsyn::Ty>, Gc<libsyn::Expr>) {
         match rule_action {
-            None => (quote_ty!(self.cx, &'a str), quote_expr!(self.cx, _val)),
+            None => {
+                let rule_expr = quote_expr!(self.cx, _val);
+
+                let rule_ty = match *expr {
+                    PosLookahead(_) =>
+                        quote_ty!(self.cx, ()),
+
+                    NegLookahead(_) =>
+                        quote_ty!(self.cx, ()),
+
+                    ZeroOrMore(_) =>
+                        quote_ty!(self.cx, Vec<&'a str>),
+
+                    OneOrMore(_) =>
+                        quote_ty!(self.cx, Vec<&'a str>),
+
+                    Optional(_) =>
+                        quote_ty!(self.cx, Vec<&'a str>),
+
+                    Nonterminal(id) => {
+                        let rule_data = grammar.rules.find(&id).unwrap();
+                        match rule_data.action {
+                            None =>
+                                quote_ty!(self.cx, &'a str),
+                            Some(RuleAction { ty: ty, expr: expr }) =>
+                                ty,
+                        }
+                    },
+                    _ =>
+                        quote_ty!(self.cx, &'a str),
+                };
+
+                (rule_ty, rule_expr)
+            },
             Some(RuleAction { ty: ty, expr: expr }) => (ty, expr),
         }
     }
@@ -242,9 +278,9 @@ impl<'a> Compiler<'a> {
                 quote_expr!(self.cx,
                     match $parser {
                         Err(e) => Err(e),
-                        Ok(s) => {
-                            bindings.$id = Some(s.clone());
-                            Ok(s)
+                        Ok((val, s)) => {
+                            bindings.$id = Some(val.clone());
+                            Ok((val, s))
                         },
                     }
                 )
@@ -418,8 +454,8 @@ impl<'a> Compiler<'a> {
         let parser = self.generate_parser_expr(exp, input_ident);
         quote_expr!(self.cx,
             match $parser {
-                Ok(rem) => Ok(rem),
-                Err(_) => Ok(("", $input_ident)),
+                Ok((val, rem)) => Ok((vec!(val), rem)),
+                Err(_) => Ok((vec!(), $input_ident)),
             }
         )
     }
