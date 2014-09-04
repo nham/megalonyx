@@ -3,7 +3,16 @@
 #[phase(plugin)] extern crate megalonyx;
 extern crate megalonyx;
 
-fn main() {}
+fn main() {
+        mega!(
+            grammar vowels_abc {
+                arule = another / ["aeiou"]
+                another = "abc"
+            }
+        )
+
+            ()
+}
 
 #[cfg(test)]
 mod test {
@@ -512,6 +521,7 @@ mod test {
         assert_eq!(exp_recognizer::parse("123 / 45"), Ok(""));
     }
 
+    /*
     #[test]
     fn test_semantic_actions() {
         mega!(
@@ -525,8 +535,9 @@ mod test {
                         s.push_str(c);
                     }
                 */
+
                 letter = c:["aeiou"] n:num -> String {
-                    "hello".to_string()
+                    "hello".to_string() + c
                 }
 
                 nz_dig = ["123456789"]
@@ -540,4 +551,5 @@ mod test {
         assert_eq!(foo::parse("i4057"), s);
         assert!(foo::parse("").is_err());
     }
+        */
 }

@@ -62,13 +62,8 @@ impl<'a> Compiler<'a> {
     fn generate_parsers(&self, grammar: &Grammar) -> Vec<Gc<libsyn::Item>> {
         let mut rule_parsers = Vec::new();
         for (n, d) in grammar.rules.iter() {
-            let (action_ty, action_expr) = match d.action {
-                Some(a) => (a.ty, a.expr),
-                None => (quote_ty!(&*self.cx, ()), quote_expr!(&*self.cx, ())),
-            };
-
             rule_parsers.push(
-                self.generate_parser(*n, action_ty, action_expr, &d.expr)
+                self.generate_parser(*n, d.action, &d.expr)
             );
         }
 
@@ -96,8 +91,7 @@ impl<'a> Compiler<'a> {
     fn generate_parser(
         &self,
         rule_name: libsyn::Ident,
-        action_ty: Gc<libsyn::Ty>,
-        action_expr: Gc<libsyn::Expr>,
+        rule_action: Option<RuleAction>,
         expr: &Expression,
     ) -> Gc<libsyn::Item> {
         let input_ident = libsyn::Ident::new(libsyn::intern("input"));
@@ -153,29 +147,42 @@ impl<'a> Compiler<'a> {
                                ));
         };
 
+        let (rule_ty, rule_expr) = self.determine_rule_return(rule_action, expr);
+        let qi =
+            quote_item!(self.cx,
+                mod $rule_name {
+                    $binding_struct
 
-        let qi = quote_item!(self.cx,
-            mod $rule_name {
-                $binding_struct
+                    $binding_impl
 
-                $binding_impl
+                    pub fn parse<'a>($input_ident: &'a str)
+                    -> Result<super::ParseResult<'a, $rule_ty>, String> {
+                        $binding_instance
+                        match $parser_contents {
+                            Err(e) => Err(e),
+                            Ok((_val, s)) => {
+                                $binding_lets
 
-                pub fn parse<'a>($input_ident: &'a str)
-                -> Result<super::ParseResult<'a, $action_ty>, String> {
-                    $binding_instance
-                    match $parser_contents {
-                        Err(e) => Err(e),
-                        Ok(s) => {
-                            $binding_lets
-
-                            Ok(($action_expr, s))
+                                Ok(($rule_expr, s))
+                            }
                         }
                     }
                 }
-            }
-        );
+            );
 
         qi.unwrap()
+    }
+
+
+    fn determine_rule_return(
+        &self,
+        rule_action: Option<RuleAction>,
+        expr: &Expression,
+    ) -> (Gc<libsyn::Ty>, Gc<libsyn::Expr>) {
+        match rule_action {
+            None => (quote_ty!(self.cx, &'a str), quote_expr!(self.cx, _val)),
+            Some(RuleAction { ty: ty, expr: expr }) => (ty, expr),
+        }
     }
 
 
@@ -230,9 +237,17 @@ impl<'a> Compiler<'a> {
                     self.gen_alt_parser(v.as_slice(), input_ident)
                 }
             },
-            Label(_, ref e) => {
-                // FIXME: currently ignoring bindings
-                self.generate_parser_expr(&**e, input_ident)
+            Label(id, ref e) => {
+                let parser = self.generate_parser_expr(&**e, input_ident);
+                quote_expr!(self.cx,
+                    match $parser {
+                        Err(e) => Err(e),
+                        Ok(s) => {
+                            bindings.$id = Some(s.clone());
+                            Ok(s)
+                        },
+                    }
+                )
             },
             _ => fail!("Unimplemented"),
         }
@@ -245,7 +260,8 @@ impl<'a> Compiler<'a> {
             if $input_ident.len() > 0 {
                 let cr = $input_ident.char_range_at(0);
                 if cr.ch == $c {
-                    Ok($input_ident.slice_from(cr.next))
+                    Ok(($input_ident.slice_to(cr.next),
+                        $input_ident.slice_from(cr.next)))
                 } else {
                     Err(format!("Could not match '{}': (saw '{}' instead)",
                                 $c, cr.ch))
@@ -261,7 +277,8 @@ impl<'a> Compiler<'a> {
         quote_expr!(self.cx,
             if $input_ident.len() > 0 {
                 let cr = $input_ident.char_range_at(0);
-                Ok($input_ident.slice_from(cr.next))
+                Ok(($input_ident.slice_to(cr.next),
+                    $input_ident.slice_from(cr.next)))
             } else {
                 Err(format!("Could not match '.' (end of input)"))
             }
@@ -275,7 +292,8 @@ impl<'a> Compiler<'a> {
         quote_expr!(self.cx,
             if $input_ident.len() >= $n {
                 if $input_ident.starts_with($sl) {
-                    Ok($input_ident.slice_from($n))
+                    Ok(($input_ident.slice_to($n),
+                        $input_ident.slice_from($n)))
                 } else {
                     Err(format!("Could not match '{}': (saw '{}' instead)",
                                 $sl, $input_ident))
@@ -292,7 +310,8 @@ impl<'a> Compiler<'a> {
             if $input_ident.len() > 0 {
                 let cr = $input_ident.char_range_at(0);
                 if $sl.find(cr.ch).is_some() {
-                    Ok($input_ident.slice_from(cr.next))
+                    Ok(($input_ident.slice_to(cr.next),
+                        $input_ident.slice_from(cr.next)))
                 } else {
                     Err(format!("Could not match '[{}]': (saw '{}' instead)",
                                 $sl, cr.ch))
@@ -306,10 +325,7 @@ impl<'a> Compiler<'a> {
     fn gen_nonterminal_parser(&self, n: libsyn::Ident, input_ident: libsyn::Ident)
     -> Gc<libsyn::Expr> {
         quote_expr!(self.cx,
-            match super::$n::parse($input_ident) {
-                Err(e) => Err(e),
-                Ok(s) => Ok(s.val1()),
-            }
+            super::$n::parse($input_ident)
         )
     }
 
@@ -318,9 +334,8 @@ impl<'a> Compiler<'a> {
         let parser = self.generate_parser_expr(exp, input_ident);
         quote_expr!(self.cx,
             {
-                let res: Result<&'a str, String> = $parser;
-                match res {
-                    Ok(_) => Ok($input_ident),
+                match $parser {
+                    Ok(_) => Ok(((), $input_ident)),
                     Err(e) => Err(e),
                 }
             }
@@ -332,10 +347,9 @@ impl<'a> Compiler<'a> {
         let parser = self.generate_parser_expr(exp, input_ident);
         quote_expr!(self.cx,
             {
-                let res: Result<&'a str, String> = $parser;
-                match res {
+                match $parser {
                     Ok(_) => Err(format!("Could not match ! expression")),
-                    Err(_) => Ok($input_ident),
+                    Err(_) => Ok(((), $input_ident)),
                 }
             }
         )
@@ -345,16 +359,25 @@ impl<'a> Compiler<'a> {
     -> Gc<libsyn::Expr> {
         let inp_ident = libsyn::Ident::new(libsyn::intern("inp"));
         let parser = self.generate_parser_expr(exp, inp_ident);
+        // the "if true" thing is a hack for type inference
         quote_expr!(self.cx,
             {
                 let mut inp = $input_ident;
+                let mut vals = vec!();
                 loop {
                     match $parser {
-                        Ok(rem) => inp = rem,
+                        Ok((val, rem)) => {
+                            inp = rem;
+                            vals.push(val);
+                        },
                         Err(_) => break,
                     }
                 }
-                Ok(inp)
+                if true {
+                    Ok((vals, inp))
+                } else {
+                    Err("".to_string())
+                }
             }
         )
     }
@@ -366,19 +389,24 @@ impl<'a> Compiler<'a> {
         quote_expr!(self.cx,
             {
                 let mut inp = $input_ident;
+                let mut vals = vec!();
                 match $parser {
                     Err(e) => Err(e),
-                    Ok(rem) => {
+                    Ok((val, rem)) => {
                         inp = rem;
+                        vals.push(val);
 
                         loop {
                             match $parser {
-                                Ok(rem) => inp = rem,
+                                Ok((val, rem)) => {
+                                    inp = rem;
+                                    vals.push(val);
+                                },
                                 Err(_) => break,
                             }
                         }
 
-                        Ok(inp)
+                        Ok((vals, inp))
                     },
                 }
             }
@@ -391,7 +419,7 @@ impl<'a> Compiler<'a> {
         quote_expr!(self.cx,
             match $parser {
                 Ok(rem) => Ok(rem),
-                Err(_) => Ok($input_ident),
+                Err(_) => Ok(("", $input_ident)),
             }
         )
     }
@@ -411,7 +439,7 @@ impl<'a> Compiler<'a> {
             quote_expr!(self.cx,
                 match $parser {
                     Err(e) => Err(e),
-                    Ok(rem) => $parser2,
+                    Ok((_, rem)) => $parser2,
                 }
             )
         }
@@ -430,7 +458,7 @@ impl<'a> Compiler<'a> {
             quote_expr!(self.cx,
                 match $parser {
                     Err(_) => $parser2,
-                    Ok(rem) => Ok(rem),
+                    Ok((val, rem)) => Ok((val, rem)),
                 }
             )
 
