@@ -1,14 +1,23 @@
-use libsyn;
+use libsyn::{mod, ToSource};
 use front::{Terminal, AnyTerminal, TerminalString, PosLookahead, NegLookahead,
             Class, ZeroOrMore, OneOrMore, Optional, Seq, Alt, Nonterminal,
             Label, Expression, RuleAction};
 use middle::Grammar;
 
 use std::gc::Gc;
+use std::collections::HashMap;
+
+fn new_parser<'a>(s: &str, sess: &'a libsyn::ParseSess) -> libsyn::Parser<'a> {
+    libsyn::new_parser_from_source_str(sess, vec!(),
+                                       "bogus".to_string(),
+                                       s.to_string())
+}
 
 pub struct Compiler<'a> {
     cx: &'a libsyn::ExtCtxt<'a>,
 }
+
+type Bindings = HashMap<libsyn::Ident, Gc<libsyn::Ty>>;
 
 impl<'a> Compiler<'a> {
     pub fn new(cx: &'a libsyn::ExtCtxt) -> Compiler<'a> {
@@ -67,6 +76,22 @@ impl<'a> Compiler<'a> {
     }
 
 
+    /* PROBLEMS WITH BINDINGS
+
+       1) we won't be initializing everything at once, only one field at a time.
+          but we're using a struct, so everything has to get a value at the same
+          time. Solution: wrap everything in an Option?
+
+       2) we can have shadowing of bindings, which is not really a problem except
+          when the initial bindings have different types than the final bindings.
+          in this case we have to be careful not to assign these initial bindings.
+          I think it's safe to throw them away, they won't get use in the rule
+          action (though in the full OMeta implementation I think actions can
+          be anywhere, which is a huge problem?)
+
+     */
+
+
     // Generate a parser for a rule
     fn generate_parser(
         &self,
@@ -78,13 +103,73 @@ impl<'a> Compiler<'a> {
         let input_ident = libsyn::Ident::new(libsyn::intern("input"));
         let parser_contents = self.generate_parser_expr(expr, input_ident);
 
+        let mut map: Bindings = HashMap::new();
+        self.find_bindings(expr, &mut map);
+
+        let mut binding_lets = vec!();
+        let mut binding_struct = None;
+        let mut binding_impl = None;
+        let mut binding_instance = None;
+
+        if map.len() > 0 {
+            let mut binding_struct_str = String::from_str("struct Binding<'a> {");
+
+            let mut struct_init_str = String::from_str("Binding {");
+
+            for (k, v) in map.iter() {
+                binding_struct_str.push_str(
+                    format!("{}: Option<{}>,", k.to_source(), v.to_source()
+                ).as_slice());
+
+                binding_lets.push(quote_stmt!(self.cx,
+                                      let $k: $v = bindings.$k.unwrap();));
+
+                struct_init_str.push_str(
+                    format!("{}: None,", k.to_source()
+                ).as_slice());
+            }
+
+            binding_struct_str.push_char('}');
+            struct_init_str.push_char('}');
+
+            let sess = libsyn::new_parse_sess();
+            let mut p = new_parser(binding_struct_str.as_slice(), &sess);
+            binding_struct = Some( p.parse_item_with_outer_attributes() );
+
+            let sess = libsyn::new_parse_sess();
+            let mut p = new_parser(struct_init_str.as_slice(), &sess);
+            let struct_init = p.parse_expr();
+
+            binding_impl = Some( quote_item!(self.cx,
+                                     impl<'a> Binding<'a> {
+                                         fn new() -> Binding<'a> {
+                                             $struct_init
+                                         }
+                                     }
+                                ));
+
+            binding_instance = Some( quote_stmt!(self.cx,
+                                 let mut bindings: Binding<'a> = Binding::new();
+                               ));
+        };
+
+
         let qi = quote_item!(self.cx,
             mod $rule_name {
+                $binding_struct
+
+                $binding_impl
+
                 pub fn parse<'a>($input_ident: &'a str)
                 -> Result<super::ParseResult<'a, $action_ty>, String> {
+                    $binding_instance
                     match $parser_contents {
                         Err(e) => Err(e),
-                        Ok(s) => Ok(($action_expr, s)),
+                        Ok(s) => {
+                            $binding_lets
+
+                            Ok(($action_expr, s))
+                        }
                     }
                 }
             }
@@ -348,6 +433,35 @@ impl<'a> Compiler<'a> {
                 }
             )
 
+        }
+    }
+
+    // find all of the bindings in an expression.
+    // it's dubious that this should be a method of Compiler, but it seems
+    // to be the easiest way to quote a type.
+    fn find_bindings(&self, expr: &Expression, map: &mut Bindings) {
+        match *expr {
+            Label(id, _) => {
+                // FIXME: check the expression to allow other types
+                let ty = quote_ty!(self.cx, &'a str);
+                map.insert(id, ty);
+            },
+            Seq(ref v) => {
+                for e in v.iter() {
+                    self.find_bindings(e, map);
+                }
+            },
+            Alt(ref v) => {
+                for e in v.iter() {
+                    self.find_bindings(e, map);
+                }
+            },
+            Optional(ref e) => self.find_bindings(&**e, map),
+            ZeroOrMore(ref e) => self.find_bindings(&**e, map),
+            OneOrMore(ref e) => self.find_bindings(&**e, map),
+            PosLookahead(ref e) => self.find_bindings(&**e, map),
+            NegLookahead(ref e) => self.find_bindings(&**e, map),
+            _ => {},
         }
     }
 }
